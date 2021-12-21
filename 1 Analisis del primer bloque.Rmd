@@ -1,0 +1,475 @@
+---
+title: "¿Qué factores influyen en la participación ciudadana peruana?"
+author: "Alexa Valenzuela Ayala"
+date: "21/12/2021"
+output: rmdformats::readthedown
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rmdformats)
+library(rio)
+data<- import("Peru LAPOP AmericasBarometer 2019 v1.0_W.dta")
+```
+
+>#VARIABLE DEPENDIENTE: 
+
+Participación ciudadana, se divide en 3 variables que compararemos juntas y separadas
+
+***PARTICIPACIÓN CIUDADANA EN VIAS LEGALES***
+
+Es decir, participa tal como la constitución dice, por meedio de referendun, acopio a las instituciones estatales, etc. 
+
+¿Ha asistido a un cabildo abierto o una sesión municipal durantelos últimos 12 meses?
+```{r}
+str(data$np1)
+table(data$np1)
+data$reunion_municipal <- as.factor(data$np1)
+levels(data$reunion_municipal)=c("Asiste","No Asiste")
+table(data$reunion_municipal)
+```
+
+Por favor, dígame si usted asiste a las reuniones de estas
+ organizaciones por lo menos una vez a la semana, una o dos veces
+ al mes, una o dos veces al año, o nunca. ¿Reuniones de un comité o
+ junta de mejoras para la comunidad? Asiste...
+```{r}
+table(data$cp8)
+data$junta=car::recode(data$cp8, "4=1;3=2;2=3;1=4")
+data$junta=as.ordered(data$junta)
+levels(data$junta)=c("Nunca","Una o dos veces al año", "Una o dos veces al mes","Una vez a la semana")
+table (data$junta)
+```
+ ***PARTICIPACIÓN CIUDADANA EN POLÍTICA (Partidos políticos)***
+
+Por favor, dígame si usted asiste a las reuniones de estas
+ organizaciones por lo menos una vez a la semana, una o dos veces
+ al mes, una o dos veces al año, o nunca. ¿Reuniones de un partido
+ o movimiento político? Asiste...
+ 
+```{r}
+table(data$cp13)
+data$junta_partido=car::recode(data$cp13, "4=1;3=2;2=3;1=4")
+data$junta_partido=as.ordered(data$junta_partido)
+levels(data$junta_partido)=c("Nunca","Una o dos veces al año", "Una o dos veces al mes","Una vez a la semana")
+table(data$junta_partido)
+```
+
+ 
+ ***PARTICIPACIÓN CIUDADANA CON CREENCIAS INDIVIDUALES:***
+
+¿En los últimos 12 meses ha participado en una manifestación o
+ protesta pública?
+```{r}
+str(data$prot3)
+data$prot3 <- as.factor(data$prot3)
+table(data$prot3)
+levels(data$prot3)=c("Sí ha participado","No ha participado")
+```
+ 
+
+>#VARIABLES INDEPENDIENTES DE PRIMER BLOQUE
+
+**Confianza Política**
+
+Según el codebook la codificación de la variable va de 1 a 7, en ese orden de menor a mayor.
+
+***Confianza en instituciones políticas y partidos políticos***
+
+Se hará un índice de confianza a raiz de la tecnica de reducción de dimensiones Analisis factorial Exploratorio que nos resumira la bateria de variables que tenemos.
+
+VI___ Confianza en el sistema de justicia (b10a), las FFAA (b12), el congreso (b13), la policía nacional (b18), los partidos políticos (b21), el presidente (b21a), la corte supremo de justicia (b31), las municipalidades (b32)
+
+(*)Creación de factores
+
+```{r}
+library(dplyr)
+subdata=select(data,"b10a","b12","b13","b18","b21","b21a","b31","b32")
+library(dplyr)
+
+subdata=subdata %>% 
+   rename(C_SistemaJusticia=b10a) %>% rename(C_FFAA=b12) %>% rename(C_congreso=b13) %>% rename(C_Policia=b18) %>% rename(C_partidosPoliticos=b21) %>% rename(C_Presidente=b21a) %>% rename(C_CorteJusticia=b31) %>% rename(C_Municipalidades=b32)
+
+names(subdata)
+```
+```{r}
+subdata[,1:8]=lapply(subdata[,1:8],as.numeric) 
+str(subdata)
+summary(subdata)
+subdata[is.na(subdata)] <- 0
+summary(subdata)
+```
+
+(*)matriz de correlación
+```{r}
+corMatrix=cor(subdata)
+library(ggcorrplot)
+ggcorrplot(corMatrix,colors = c("#ff0000", "white", "#0000ff"))
+```
+A grandes rasgos vemos que existe correlación positiva en la matriz por lo que podria seguirse con los siguientes pasos
+
+```{r}
+library(psych)
+psych::KMO(subdata)
+```
+El KMO es mayor a 0.7, por lo que el test es muy bueno, la correlación parcial (varianza) nos da luz verde a seguir. Asi mismo el MSA inidivdual de cada variable es muy alta.
+
+```{r}
+cortest.bartlett(corMatrix,n=nrow(subdata))$p.value>0.05
+
+```
+Salió falso a la H0, es decir se cumple HA, entonces, la matriz de correlación y de identidad son diferentes es decir las variables sí están CORRELACIONADAS con las demás y no solo con sigo mismas
+
+Se llevara a cabo APC debido a que queremos ver la varianza total, un buen resumen de la bateria de variables, para que terminen creando el indicador de confianza por vias convencionales (de forma general).
+
+```{r}
+fa.parallel(subdata, fm="pa", fa="pc", main = "Gráfico de sedimentación Componentes Principales")
+```
+R sugiere hacer 1 factor
+```{r}
+library("factoextra")
+library(FactoMineR)
+res.pca <-PCA(subdata, graph = FALSE)
+eig.val <-get_eig(res.pca)
+eig.val
+
+```
+Solamente la primera dimensión es mayor a 1 y explica en su mayoria casi un 50%, es un % por lo que optaremos tan solo por 1 factor
+
+```{r}
+comp1<- pca(subdata,nfactors = 1,rotate = "varimax")
+print(comp1$loadings,cutoff = 0.5)
+```
+**¿Qué variables aportaron más a los componentes?**
+```{r}
+sort(comp1$communality)
+```
+Confianza en la Corte Suprema de Justicia es la variable con mayor porcentaje de varianza total, la que aporta más, es decir da más información al resto de variables.
+
+**¿Qué variables contribuyen a más de un componente?**
+```{r}
+sort(comp1$complexity)
+```
+Las variables que aportan a más de un factor son todas, es decir, todas estan presentes en mayor proporción en todas.
+
+**¿Qué variables tiene un componente “único” más grande?**
+```{r}
+sort(comp1$uniquenesses)
+
+```
+El componente único entre las variables, que son únicas y que está presente en menos factores es confianza en las Fuerzas Armadas
+
+```{r}
+comp1_casos=data.frame(comp1$scores)
+library(dplyr)
+comp1_casos=select(comp1_casos,PC1)
+colnames(comp1_casos)=c("Confianza_Via_Convencional")
+
+subdata$Confianza_Convencional<- comp1_casos$Confianza_Via_Convencional
+
+subdata$Confianza_Convencional=as.numeric(subdata$Confianza_Convencional)
+
+library(BBmisc)
+subdata$Confianza_Convencional_normalizada = normalize(subdata$Confianza_Convencional, 
+                                        method = "range", 
+                                        margin=2, # by column
+                                        range = c(0, 100))
+
+```
+
+```{r}
+summary(subdata$Confianza_Convencional_normalizada)
+hist(subdata$Confianza_Convencional_normalizada)
+```
+```{r}
+data$Confiaza_Convencional=subdata$Confianza_Convencional_normalizada
+```
+
+Se podrá hacer tecnicas estadisticas con variables Confianza_Convencional_normalizada
+
+
+##Otras VI que podrían acompañar a Confianza en vias convencionales##
+
+Indice sobre alto o baja legitimidad al sistema político
+
+VI___apoyar al sistema político (B6), respeto por instituciones políticas(B2) 
+
+```{r}
+data$legitimidad=(data$b6+data$b2+data$b4)
+summary(data$legitimidad)
+```
+```{r}
+data$legitimidad=(data$legitimidad-3)/18*100
+summary(data$legitimidad)
+```
+```{r}
+library(car)
+library(dplyr)
+
+data$legitimidad=car::recode(data$legitimidad, "0:47=1;47:100=2")
+table(data$legitimidad)
+data$legitimidad=as.ordered(data$legitimidad)
+levels(data$legitimidad)=c("Alta legitimidad","Baja legitimidad")
+table(data$legitimidad)
+```
+
+VI___Creer que los derechos básicos de los ciudadanos están protegidos por el sistema político peruano(B3) sera dicotomica (fast dummies) Se cree o no se cree
+```{r}
+table(data$b3)
+```
+```{r}
+data$DDHH=car::recode(data$b3, "1:3=1;3:7=2")
+table(data$DDHH)
+
+data$DDHH=as.ordered(data$DDHH)
+levels(data$DDHH)=c("No cree","Si cree")
+table(data$DDHH)
+```
+```{r}
+library(fastDummies)
+data=dummy_cols(data, select_columns = c("DDHH")) 
+names(data)
+table(data$DDHH_No)
+table(data$DDHH_Si)
+table(data$DDHH_NA)
+```
+
+"DDHH_No"              "DDHH_Si"                "DDHH_NA" 
+1 se cree no     1 se cree si                1 ni si ni no. NA
+0 se cree sí     0 se cree no                0 es Si o no
+
+>Democracia
+
+**Cree o no en la democracia**
+
+¿En su opinion el Perú es una democracia? dem(30)Si o no, es o no es
+
+```{r}
+data$Cree_Dem=car::recode(data$dem30, "1=2;2=1")
+table(data$Cree_Dem)
+data$Cree_Dem=as.ordered(data$Cree_Dem)
+levels(data$Cree_Dem)=c("No","Si")
+table(data$Cree_Dem)
+```
+```{r}
+library(fastDummies)
+data=dummy_cols(data, select_columns = c("Cree_Dem")) 
+names(data)
+```
+
+"Cree_Dem_NO"      "Cree_Dem_SI"           "Cree_Dem_NA" 
+1 NO se cree*       1 si se cree*           1 ni si ni no. NA
+0 SI se cree        0 no se cree            0 es Si o no
+
+***Percepción del sentido democratico de los ciudadanos***
+
+**Otra VI que acompañe a creer en la democracia***
+
+En general, ¿usted diría que está muy satisfecho(a), satisfecho(a), insatisfecho(a) o muy insatisfecho(a) con la forma en que la democracia funciona en Perú? pn4. 
+La codificación esta alreves, 1 es muy satisfecho cuando deberia ser muy insatisfecho 
+
+(*)RECODIFICAMOS
+```{r}
+table(data$pn4)
+```
+```{r}
+data$nivel_satis=car::recode(data$pn4, "4=1;3=2;2=3;1=4")
+data$nivel_satis=as.ordered(data$nivel_satis)
+levels(data$nivel_satis)=c("Muy insatisfecho","Insatisfecho","Satisfecho","Muy satisfecho")
+table (data$nivel_satis)
+```
+
+
+**Otras VI que acompañen a no creer en la democracia**
+
+*Tolerancia a golpes militares, se representará como 1 cuando hay delincuencia y 1 cuando hay corrupcion cuando se use la regresión
+
+* Cuando hay mucha delincuencia
+
+```{r}
+table(data$jc10)
+table(data$jc13)
+```
+
+
+```{r}
+data$golpe_d=car::recode(data$jc10, "1=2;2=1")
+data$golpe_d=as.ordered(data$golpe_d)
+levels(data$golpe_d)=c("No se justifica","Si se justifica")
+table (data$golpe_d)
+
+data$golpe_c=car::recode(data$jc13, "1=2;2=1")
+data$golpe_c=as.ordered(data$golpe_c)
+levels(data$golpe_c)=c("No se justifica","Si se justifica")
+table (data$golpe_c)
+```
+
+Sobre golpes militares debido a la delincuencia
+```{r}
+library(fastDummies)
+data=dummy_cols(data, select_columns = c("golpe_d")) 
+names(data)
+```
+"golpe_d_No"             "golpe_d_Si"            "golpe_d_NA" 
+
+Sobre golpes militares debido a la corrupcion
+```{r}
+library(fastDummies)
+data=dummy_cols(data, select_columns = c("golpe_c")) 
+names(data)
+```
+"golpe_c_No"      "golpe_c_Si"             "golpe_c_NA" 
+
+Entonces tolerancia a los golpes militares se representará en la regresión que se haga como golpes_d si, y golpes_c si o 1 en ambos casos, como que si se dan.
+
+***Situación económica personal de los ciudadanos***
+
+¿En cual de los rangos se encuentran los ingresos familiares mensueales?
+
+```{r}
+table(data$q10new)
+```
+```{r}
+data$rango_ingresos=car::recode(data$q10new, "0:6=1;7:15=2;16=3")
+data$rango_ingresos=as.ordered(data$rango_ingresos)
+levels(data$rango_ingresos)=c("Clase Baja","Clase media","Clase media-alta")
+table(data$rango_ingresos)
+```
+
+**Otras VI que pueden acompañar**
+
+¿Considera uested que su situación económica actual es mejor, igual o peor que la de hace doce meses?
+
+(*)RECODIFICACION
+```{r}
+table(data$idio2)
+```
+
+```{r}
+data$situación_economica=car::recode(data$idio2, "3=1;2=2;1=3")
+data$situación_economica=as.ordered(data$situación_economica)
+levels(data$situación_economica)=c("Peor","Igual","Mejor")
+table(data$situación_economica)
+```
+
+**Tendencia política**
+
+ tenemos una escala del 1 a 10
+ que va de izquierda a derecha, en la que el 1 significa izquierda
+ y el 10 significa derecha
+```{r}
+str(data$l1)
+table(data$l1)
+data$ideologia=as.numeric(data$l1)
+data$ideologia=cut(data$ideologia,breaks=c(0,3,6,10),labels = c("Izquierda", "Centro", "Derecha"))
+table(data$ideologia)
+
+library(fastDummies)
+data=dummy_cols(data, select_columns = c("ideologia")) 
+names(data)
+
+```
+"ideologia_Centro"        "ideologia_Derecha"      
+"ideologia_NA" 
+
+>#TÉCNICAS ESTADÍSTICAS
+
+***Participacion en vias legales***
+    - Asiste a reunion de municipalidad es binaria (asiste y no asiste)
+    
+    - Asiste a reuniones de comite o juntas municipales para la mejora de la comunidad es multinomial (nunca, una o 2 veces al mes, una vez a la semana)
+    
+    1. Confianza Política
+    
+    2. Legitimidad
+    
+    4. Cree que los DDHH estan bien cubiertos por el estado
+    
+    5. Clase social
+
+```{r}
+modelo1=glm(data$reunion_municipal~data$legitimidad+data$`DDHH_Si cree`+data$ideologia_Centro,family=binomial(link="logit"))
+
+summary(modelo1)
+```
+
+
+1.Si nos basamos en 0.5, solamente la variable que explica que el individuo cree que los derechos humanos son garantizados por el estado influiria en la VD. Sin embargo, como investigadores, aceptaremos hasta 1 el z value, para no dejar de invisibilizar variables importantes que mucho tienen que ver con este tipo de participación política. Por lo que también consideraremos que influye la clase de legitimidad que (positiva o negativa) en este tipo de participación. Asimismo, a grandes rasgos, la ideología más cercana a 1 es el centro por lo que nos arriesgariamos a decir que esta es la que tiende a tener más participación política basada en vias legales institucionales.
+
+2.Con excepción a la de relación directa, las variables inversas (con signo negativo) son la variable el individuo cree que el estado garantiza sus derechos y la ideologia de derecha 
+
+
+```{r}
+exp(0.1774)
+```
+```{r}
+1-exp(-0.3715)
+```
+```{r}
+exp(0.2885)
+```
+
+3. Cuando una persona legitima a las instituciones estatales, el apoyar la participación política insititucional por vias legales incrementa en 1.19%. Asimismo cuando una persona sea de centro, aumentara en 1.3% su posibilidad de apoyar esta tendencia de participación.Sin embargo, cuando una persona persona crea en la democracia como concepto, disminuira su tendencia a este tipo de participación, posiblemente porque no lo cumplira
+
+```{r}
+num=exp(2.0009-(0.1623*60)+(-0.3723*1)+(0.2885*0))
+den=1+num
+probabilidad=num/den
+probabilidad
+```
+
+4. Ahora bien la probabilidad de que una persona tenga baja legitimidad hacia las instituciones estatales, crea en la democracia como concepto, no sea de centro (es decir sea de izquierda o derecha) y apoye a a este tipo de participación convencional es mucho menor al 1%. Por lo que posiblemente, las personas con baja legitimidad y sean de izquierda, debido a que la derecha cree más en la convencionalidad, opten por otras formas de participación. 
+
+
+***Participación Ciudadana con creencias individuales***
+
+   - Participo en protesta es binomial (si participo, no participo)
+     
+     1.Como ve la situación economica del pais
+     
+   2.Rango de ingresos mensuales familiares que el individuo posee
+     
+  3. Si no esta de acuerdo con que un golpe militar, debido a la delincuencia, sea justificada
+     
+     
+```{r}
+modelo3=glm(data$prot3~data$situación_economica+data$rango_ingresos+data$`golpe_d_No se justifica`,family=binomial(link="logit"))
+
+summary(modelo3)
+```
+1. Por influencia interna, en este caso también aceptaremos el z value hasta el 1 y no hasta el 0.05. Primero que nada vemos que con respecto a la variable como considera usted que esta la situacsituación economica se divide en peor, igual y mejor. Sin embargo el R desecho la categoria mejor y dejo la de peor o igual, ambas influyentes en el tipo de participación política que a raiz de creencias individuales genera protestas y movilizaciones. Asimismo, no solo consta de creeer como esta la situacipon economica sino que en cuanto al rango mensual de ingresos familiar quienes se autoperciben encuentran en clase baja y clase media (como podemos ver en rango_ingresos) son quienes apoyan este tipo de participacion, pero sobre todo los de clase baja. Asimismo, quienes creen que un golpe militar (en aras de su idea de democracia) no debe ser tolerado sea cual fuere (en este caso po delincuencia) también influyen en quienes apoyan este tipo de participación
+
+2.Con excepción a la situación económica más baja, el resto de variables son inversas 
+```{r}
+exp(0.51590)
+```
+
+```{r}
+1-exp(-0.44945)
+```
+
+
+```{r}
+1-exp(-0.74800)
+```
+
+
+```{r}
+1-exp( -0.07597)
+```
+
+
+```{r}
+1-exp(-0.31316)
+```
+
+Cuando una persona perciba que la situaicon economica de su país esta entre de peor a igual,  apoya en un 1.6% más las protestas como particiáción ciudadana. Asimismo, mientras que se perciba que empeore y más se baje, se apoyara en un 0.3% más . 
+
+Cuando una persona tenga cada vez mayores ingresos familiares mensuales y lo situan en rangos (clases) aumente, apoyara en un 0.5% menos las protestas como particiáción ciudadana. Asimismo, mientras que menos ingresos se posea y más se baje en cuanto a clases sociales, se apoyara en un 0.07% más 
+
+Por último, cuanto menos se crea que los golpes militares, justificados en delincuencia, estan justificados, se apoyara en 0.2% más las protestas como participación 
+
